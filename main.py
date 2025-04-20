@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 
 from hand_detectors import mediapipe_hand_detector as mp_detector
+from video_handlers.cv_video_handler import VideoHandler
+
 # библиотеки для контроля мыши: pynput, pyautogui, autopy
 
 
@@ -12,19 +14,12 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 detector = mp_detector.MediapipeHandDetector(0.7, 0.7)
+video_handler = VideoHandler()
 
 #TODO захватывать не только камеру, но и экран пользователя
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    error("Cannot open camera")
-    exit()
-
-# (capx, capy) = (1920, 1080)
-# cap.set(3, capx)
-# cap.set(4, capy)
-
 while True:
-    ret, frame = cap.read()
+    ret, frame = video_handler.get_screen()
+
     if not ret:
         break
 
@@ -69,5 +64,4 @@ while True:
     if cv2.waitKey(1) == ord('q'):
         break
 
-cap.release()
 cv2.destroyAllWindows()
