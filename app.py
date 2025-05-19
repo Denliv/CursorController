@@ -122,7 +122,8 @@ def _on_mousewheel(event, widget):
 
 
 def update_gestures_option_menu():
-    global config
+    global config_handler
+    config = config_handler.load_config()
     if config.get("multiple_gestures", False):
         return
     used = set(val.get() for val in actions.values() if val.get() != default_option)
@@ -148,7 +149,8 @@ def configure_menu_panel():
     settings_menu = tk.Menu(tearoff=0, title="Settings")
 
     # Загружаем config
-    global config
+    global config_handler
+    config = config_handler.load_config()
 
     # Переменные Settings меню
     show_fps_var = tk.BooleanVar(value=config.get("show_fps", False))
@@ -237,12 +239,11 @@ IMG_SIZE = 100
 model_var = None
 main_menu = None
 is_running = False
-config_vars = None
 
 # Настройка хэндлеров
 camera_handler = AppCameraHandler()
 config_handler = ConfigHandler("config.json")
-config = config_handler.load_config()
+config_vars = None
 
 # Настройки окна
 root = configure_app_window()
@@ -261,7 +262,7 @@ configure_bottom_panel()
 main_frame = configure_main_frame()
 
 # Левая часть — видео
-configure_camera_frame(side="left", time=33)
+configure_camera_frame(side="left", time=35)
 
 # Правая часть — список
 configure_scrolling_frame("right")

@@ -1,7 +1,7 @@
 {
     "show_fps": true,
     "show_bbox": false,
-    "show_skeleton": true,
+    "show_skeleton": false,
     "multiple_gestures": false,
     "model_name": "model2"
 }

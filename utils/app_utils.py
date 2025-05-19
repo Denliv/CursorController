@@ -17,7 +17,8 @@ class AppCameraHandler:
         self.detector = mp_detector.MediapipeHandDetector(0.5, 0.5)
         self.video_handler = VideoHandler(width=640, height=480)
         self.frame_counter = 0
-        self.skip_frames = 1
+        self.skip_frames = 2
+        self.last_frame_time = time.time()
 
     def get_camera_image(self, is_running, config_vars):
         _, frame = self.video_handler.get_screen()
@@ -33,17 +34,22 @@ class AppCameraHandler:
         if not is_running:
             return
 
-        # self.frame_counter += 1
-        # if self.frame_counter % self.skip_frames != 0:
-        #     return
+        current_time = time.time()
+        if current_time - self.last_frame_time > 0:  # Избегаем деления на ноль
+            self.fps = 1.0 / (current_time - self.last_frame_time)
+        self.last_frame_time = current_time
+
+        self.frame_counter += 1
+        if self.frame_counter % self.skip_frames != 0:
+            return
 
         hand_boxes, hand_landmarks_list, hand_types = self.detector.detect_hands(frame)
         for (box, landmark, hand_type) in zip(hand_boxes, hand_landmarks_list, hand_types):
             min_x, min_y, max_x, max_y = box
             # Отрисовка
-            if config_vars["show_bbox"]:
+            if config_vars.get("show_bbox", False):
                 cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)
-            if config_vars["show_skeleton"]:
+            if config_vars.get("show_skeleton", False):
                 self.mp_drawing.draw_landmarks(frame,
                                                landmark,
                                                self.mp_hands.HAND_CONNECTIONS,
@@ -67,6 +73,12 @@ class AppCameraHandler:
             # Отображение результата
             cv2.putText(frame, gesture, (min_x, min_y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        if config_vars.get("show_fps", False):
+            frame_width = frame.shape[1]
+            fps_text = f"FPS: {int(self.fps)}"
+            cv2.putText(frame, fps_text, (frame_width - 100, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
 
     def get_camera_parameters(self):
         video_captor = self.video_handler.video_captor
