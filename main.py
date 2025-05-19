@@ -1,6 +1,4 @@
-﻿from re import error
-
-import mediapipe as mp
+﻿import mediapipe as mp
 import cv2
 import numpy as np
 
@@ -15,7 +13,6 @@ mp_drawing_styles = mp.solutions.drawing_styles
 detector = mp_detector.MediapipeHandDetector(0.7, 0.7)
 video_handler = VideoHandler()
 
-#TODO захватывать не только камеру, но и экран пользователя
 while True:
     ret, frame = video_handler.get_screen()
 
