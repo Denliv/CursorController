@@ -17,7 +17,8 @@ class AppCameraHandler:
         self.detector = mp_detector.MediapipeHandDetector(0.5, 0.5)
         self.video_handler = VideoHandler(width=640, height=480)
         self.frame_counter = 0
-        self.skip_frames = 2
+        self.skip_frames = 1
+        self.fps = 0
         self.last_frame_time = time.time()
 
     def get_camera_image(self, is_running, config_vars):
@@ -35,13 +36,14 @@ class AppCameraHandler:
             return
 
         current_time = time.time()
-        if current_time - self.last_frame_time > 0:  # Избегаем деления на ноль
+        if current_time - self.last_frame_time > 0:
             self.fps = 1.0 / (current_time - self.last_frame_time)
         self.last_frame_time = current_time
 
         self.frame_counter += 1
         if self.frame_counter % self.skip_frames != 0:
             return
+        frame_height, frame_width = frame.shape[:2]
 
         hand_boxes, hand_landmarks_list, hand_types = self.detector.detect_hands(frame)
         for (box, landmark, hand_type) in zip(hand_boxes, hand_landmarks_list, hand_types):
@@ -74,11 +76,35 @@ class AppCameraHandler:
             cv2.putText(frame, gesture, (min_x, min_y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
+            if len(hand_types) == 1 or hand_type == "Right":
+                palm_points = [0, 5, 17]
+
+                coords = np.array([
+                    [landmark.landmark[i].x * frame_width, landmark.landmark[i].y * frame_height]
+                    for i in palm_points
+                ])
+
+                center = coords.mean(axis=0).astype(int)
+                cv2.circle(frame, tuple(center), 5, (0, 255, 0), -1)
+
         if config_vars.get("show_fps", False):
             frame_width = frame.shape[1]
             fps_text = f"FPS: {int(self.fps)}"
             cv2.putText(frame, fps_text, (frame_width - 100, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
+
+        if config_vars.get("show_grid", False):
+            # Горизонтальные линии
+            y1 = 2 * frame_height // 5
+            y2 = 3 * frame_height // 5
+            cv2.line(frame, (0, y1), (frame_width, y1), (255, 0, 0), 1)
+            cv2.line(frame, (0, y2), (frame_width, y2), (255, 0, 0), 1)
+
+            # Вертикальные линии
+            x1 = 2 * frame_width // 5
+            x2 = 3 * frame_width // 5
+            cv2.line(frame, (x1, 0), (x1, frame_height), (255, 0, 0), 1)
+            cv2.line(frame, (x2, 0), (x2, frame_height), (255, 0, 0), 1)
 
     def get_camera_parameters(self):
         video_captor = self.video_handler.video_captor
@@ -100,6 +126,7 @@ class ConfigHandler:
             "show_skeleton": False,
             "multiple_gestures": False,
             "model_name": [os.path.splitext(f)[0] for f in os.listdir("models")][0],
+            "show_grid": False,
             "fps": 33
         }
 
@@ -112,6 +139,6 @@ class ConfigHandler:
         except Exception:
             return self.default_config
 
-    def save_config(self, config = None):
+    def save_config(self, config=None):
         with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)

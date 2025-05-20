@@ -157,23 +157,28 @@ def configure_menu_panel():
     show_bbox_var = tk.BooleanVar(value=config.get("show_bbox", False))
     show_skeleton_var = tk.BooleanVar(value=config.get("show_skeleton", False))
     multiple_gestures_var = tk.BooleanVar(value=config.get("multiple_gestures", False))
+    show_grid_var = tk.BooleanVar(value=config.get("show_grid", False))
     global model_var
     model_var = tk.StringVar(value=config.get("model_name", models[0]))
 
     def save_config_callback(*args):
+        global model_var, config_vars
         new_config = {
             "show_fps": show_fps_var.get(),
             "show_bbox": show_bbox_var.get(),
             "show_skeleton": show_skeleton_var.get(),
             "multiple_gestures": multiple_gestures_var.get(),
+            "show_grid": show_grid_var.get(),
             "model_name": model_var.get()
         }
         config_handler.save_config(new_config)
+        config_vars = new_config
 
     show_fps_var.trace("w", save_config_callback)
     show_bbox_var.trace("w", save_config_callback)
     show_skeleton_var.trace("w", save_config_callback)
     multiple_gestures_var.trace("w", save_config_callback)
+    show_grid_var.trace("w", save_config_callback)
     model_var.trace("w", save_config_callback)
 
     # Настройка Settings
@@ -181,6 +186,7 @@ def configure_menu_panel():
     settings_menu.add_checkbutton(label="Show Hand bounding box", variable=show_bbox_var)
     settings_menu.add_checkbutton(label="Show hand skeleton", variable=show_skeleton_var)
     settings_menu.add_checkbutton(label="Multiple gestures for action", variable=multiple_gestures_var)
+    settings_menu.add_checkbutton(label="Show Grid", variable=show_grid_var)
 
     models_menu = tk.Menu(settings_menu, tearoff=0)
     for model_name in models:
@@ -240,13 +246,13 @@ model_var = None
 main_menu = None
 is_running = False
 
+# Настройки окна
+root = configure_app_window()
+
 # Настройка хэндлеров
 camera_handler = AppCameraHandler()
 config_handler = ConfigHandler("config.json")
-config_vars = None
-
-# Настройки окна
-root = configure_app_window()
+config_vars = config_handler.load_config()
 
 # Определяем стиль шрифта
 global_font = ('Arial', 12)
@@ -262,7 +268,7 @@ configure_bottom_panel()
 main_frame = configure_main_frame()
 
 # Левая часть — видео
-configure_camera_frame(side="left", time=35)
+configure_camera_frame(side="left", time=33)
 
 # Правая часть — список
 configure_scrolling_frame("right")

@@ -3,5 +3,6 @@
     "show_bbox": false,
     "show_skeleton": false,
     "multiple_gestures": false,
+    "show_grid": true,
     "model_name": "model2"
 }
