@@ -75,24 +75,30 @@ class AppCameraHandler:
             # Отображение результата
             cv2.putText(frame, gesture, (min_x, min_y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            self._show_cursor_point(hand_types, hand_type, landmark, frame, frame_width, frame_height)
 
-            if len(hand_types) == 1 or hand_type == "Right":
-                palm_points = [0, 5, 17]
+        self._show_fps(config_vars, frame, frame_width)
+        self._show_grid(config_vars, frame, frame_width, frame_height)
 
-                coords = np.array([
-                    [landmark.landmark[i].x * frame_width, landmark.landmark[i].y * frame_height]
-                    for i in palm_points
-                ])
+    def _show_cursor_point(self, hand_types, hand_type, landmark, frame, frame_width, frame_height):
+        if len(hand_types) == 1 or hand_type == "Right":
+            palm_points = [0, 5, 17]
 
-                center = coords.mean(axis=0).astype(int)
-                cv2.circle(frame, tuple(center), 5, (0, 255, 0), -1)
+            coords = np.array([
+                [landmark.landmark[i].x * frame_width, landmark.landmark[i].y * frame_height]
+                for i in palm_points
+            ])
 
+            center = coords.mean(axis=0).astype(int)
+            cv2.circle(frame, tuple(center), 5, (0, 255, 0), -1)
+
+    def _show_fps(self, config_vars, frame, frame_width):
         if config_vars.get("show_fps", False):
-            frame_width = frame.shape[1]
             fps_text = f"FPS: {int(self.fps)}"
             cv2.putText(frame, fps_text, (frame_width - 100, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
 
+    def _show_grid(self, config_vars, frame, frame_width, frame_height):
         if config_vars.get("show_grid", False):
             # Горизонтальные линии
             y1 = 2 * frame_height // 5
