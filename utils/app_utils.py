@@ -3,11 +3,11 @@ import mediapipe as mp
 import numpy as np
 import json
 import os
-import threading
 import time
 from PIL import Image, ImageTk
 from hand_detectors import mediapipe_hand_detector as mp_detector
 from video_handlers.cv_video_handler import VideoHandler
+from system_action_handlers.mouse_action_handler import MouseActionHandler
 
 class AppCameraHandler:
     def __init__(self):
@@ -20,6 +20,7 @@ class AppCameraHandler:
         self.skip_frames = 1
         self.fps = 0
         self.last_frame_time = time.time()
+        self.mouseController = MouseActionHandler(10)
 
     def get_camera_image(self, is_running, config_vars):
         _, frame = self.video_handler.get_screen()
@@ -44,6 +45,15 @@ class AppCameraHandler:
         if self.frame_counter % self.skip_frames != 0:
             return
         frame_height, frame_width = frame.shape[:2]
+
+        s1_x = frame_width // 5
+        s1_y = frame_height // 5
+        s2_x = 4 * frame_width // 5
+        s2_y = 4 * frame_height // 5
+        x1 = 2 * frame_width // 5
+        x2 = 3 * frame_width // 5
+        y1 = 2 * frame_height // 5
+        y2 = 3 * frame_height // 5
 
         hand_boxes, hand_landmarks_list, hand_types = self.detector.detect_hands(frame)
         for (box, landmark, hand_type) in zip(hand_boxes, hand_landmarks_list, hand_types):
@@ -75,12 +85,12 @@ class AppCameraHandler:
             # Отображение результата
             cv2.putText(frame, gesture, (min_x, min_y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            self._show_cursor_point(hand_types, hand_type, landmark, frame, frame_width, frame_height)
+            self._show_cursor_point(hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
 
         self._show_fps(config_vars, frame, frame_width)
-        self._show_grid(config_vars, frame, frame_width, frame_height)
+        self._show_grid(config_vars, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
 
-    def _show_cursor_point(self, hand_types, hand_type, landmark, frame, frame_width, frame_height):
+    def _show_cursor_point(self, hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y):
         if len(hand_types) == 1 or hand_type == "Right":
             palm_points = [0, 5, 17]
 
@@ -91,6 +101,7 @@ class AppCameraHandler:
 
             center = coords.mean(axis=0).astype(int)
             cv2.circle(frame, tuple(center), 5, (0, 255, 0), -1)
+            self.mouseController.move_mouse(center, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
 
     def _show_fps(self, config_vars, frame, frame_width):
         if config_vars.get("show_fps", False):
@@ -98,17 +109,16 @@ class AppCameraHandler:
             cv2.putText(frame, fps_text, (frame_width - 100, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
 
-    def _show_grid(self, config_vars, frame, frame_width, frame_height):
+    def _show_grid(self, config_vars, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y):
         if config_vars.get("show_grid", False):
+            # Квадрат
+            cv2.rectangle(frame, (s1_x, s1_y), (s2_x, s2_y), (255, 0, 0), 1)
+
             # Горизонтальные линии
-            y1 = 2 * frame_height // 5
-            y2 = 3 * frame_height // 5
             cv2.line(frame, (0, y1), (frame_width, y1), (255, 0, 0), 1)
             cv2.line(frame, (0, y2), (frame_width, y2), (255, 0, 0), 1)
 
             # Вертикальные линии
-            x1 = 2 * frame_width // 5
-            x2 = 3 * frame_width // 5
             cv2.line(frame, (x1, 0), (x1, frame_height), (255, 0, 0), 1)
             cv2.line(frame, (x2, 0), (x2, frame_height), (255, 0, 0), 1)
 
