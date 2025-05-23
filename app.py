@@ -6,10 +6,10 @@ import os
 
 from tkinter import ttk
 from PIL import Image, ImageTk
+
+from model_api.ModelFactory import ModelFactory
 from utils.app_utils import AppCameraHandler, ConfigHandler
 
-
-# TODO Julia lang | AutoML | Flux.jl
 
 def configure_app_window():
     # ff_width, ff_height = camera_handler.get_camera_parameters()
@@ -18,14 +18,20 @@ def configure_app_window():
     window.title("Cursor Controller")
     window.resizable(True, True)
     # window.minsize(ff_width + sf_width, 400)
-    window.bind('<Escape>', lambda e: window.quit())
+    window.bind('<Escape>', lambda e: on_exit())
     window.protocol("WM_DELETE_WINDOW", on_closing)
     return window
 
 
+def on_exit():
+    root.quit()
+    on_closing()
+
+
 def on_closing():
-    global camera_handler
+    global camera_handler, config_handler, config_vars
     del camera_handler
+    config_handler.save_config(config_vars)
     root.destroy()
 
 
@@ -44,8 +50,8 @@ def configure_camera_frame(side, time=33):
 
 
 def show_camera_image(label, time):
-    global is_running, config_vars
-    photo_image = camera_handler.get_camera_image(is_running, config_vars)
+    global is_running, config_vars, camera_handler, model
+    photo_image = camera_handler.get_camera_image(is_running, config_vars, model)
     label.photo_image = photo_image
     label.configure(image=photo_image)
     label.after(time, show_camera_image, label, time)
@@ -74,7 +80,7 @@ def configure_scrolling_frame(side):
 
 
 def fill_scrolling_frame(scrolling_frame):
-    for index, gesture in enumerate(hand_gestures, start=1):
+    for index, gesture in enumerate(hand_gestures_active, start=1):
         frame = tk.Frame(scrolling_frame)
         frame.pack(fill="x", pady=5)
 
@@ -86,7 +92,7 @@ def fill_scrolling_frame(scrolling_frame):
         if not os.path.exists(image_path):
             image_path = os.path.join("images", "no_image.png")
         try:
-            photo = ImageTk.PhotoImage(Image.open(image_path).resize((IMG_SIZE, IMG_SIZE), Image.Resampling.BOX))
+            photo = ImageTk.PhotoImage(Image.open(image_path).resize((hand_gesture_img_size, hand_gesture_img_size), Image.Resampling.BOX))
             gesture_images[gesture] = photo
             img_label = tk.Label(frame, image=photo)
             img_label.pack(side="left", padx=5)
@@ -94,8 +100,10 @@ def fill_scrolling_frame(scrolling_frame):
             img_label = tk.Label(frame, text=f"[{gesture}]")
             img_label.pack(side="left", padx=5)
 
-        selected_option = tk.StringVar(value=default_option)
-        dropdown = ttk.OptionMenu(frame, selected_option, default_option, *options, style='my.TMenubutton')
+        global config_vars
+
+        selected_option = tk.StringVar(value=config_vars.get(f"{gesture}", default_option))
+        dropdown = ttk.OptionMenu(frame, selected_option, selected_option.get(), *options, style='my.TMenubutton')
         dropdown["menu"].configure(font=("Arial", 12), activebackground="#000")
         dropdown.pack(side="left")
 
@@ -122,11 +130,11 @@ def _on_mousewheel(event, widget):
 
 
 def update_gestures_option_menu():
-    global config_handler
-    config = config_handler.load_config()
-    if config.get("multiple_gestures", False):
-        return
-    used = set(val.get() for val in actions.values() if val.get() != default_option)
+    global config_vars
+    if config_vars.get("multiple_gestures", False):
+        used = set()
+    else:
+        used = set(val.get() for val in actions.values() if val.get() != default_option)
     for gesture_name, action in actions.items():
         current_action = action.get()
         gesture_menu = option_menu[gesture_name]["menu"]
@@ -137,10 +145,24 @@ def update_gestures_option_menu():
                     option not in used and option != default_option):
                 gesture_menu.add_command(label=option, command=lambda v=action, o=option: on_select(v, o))
 
+        config_vars[gesture_name] = current_action
+
 
 def on_select(action, value):
     action.set(value)
     update_gestures_option_menu()
+
+
+def save_config_callback(var, var_param):
+    global config_vars
+    config_vars[var_param] = var.get()
+
+
+def clear_hand_gestures_settings():
+    global hand_gestures_active
+    for gesture, action in actions.items():
+        action.set(default_option)
+        config_vars[gesture] = default_option
 
 
 def configure_menu_panel():
@@ -149,37 +171,23 @@ def configure_menu_panel():
     settings_menu = tk.Menu(tearoff=0, title="Settings")
 
     # Загружаем config
-    global config_handler
-    config = config_handler.load_config()
+    global config_vars
 
     # Переменные Settings меню
-    show_fps_var = tk.BooleanVar(value=config.get("show_fps", False))
-    show_bbox_var = tk.BooleanVar(value=config.get("show_bbox", False))
-    show_skeleton_var = tk.BooleanVar(value=config.get("show_skeleton", False))
-    multiple_gestures_var = tk.BooleanVar(value=config.get("multiple_gestures", False))
-    show_grid_var = tk.BooleanVar(value=config.get("show_grid", False))
+    show_fps_var = tk.BooleanVar(value=config_vars.get("show_fps", False))
+    show_bbox_var = tk.BooleanVar(value=config_vars.get("show_bbox", False))
+    show_skeleton_var = tk.BooleanVar(value=config_vars.get("show_skeleton", False))
+    multiple_gestures_var = tk.BooleanVar(value=config_vars.get("multiple_gestures", False))
+    show_grid_var = tk.BooleanVar(value=config_vars.get("show_grid", False))
     global model_var
-    model_var = tk.StringVar(value=config.get("model_name", models[0]))
+    model_var = tk.StringVar(value=config_vars.get("model_name", models_list[0]))
 
-    def save_config_callback(*args):
-        global model_var, config_vars
-        new_config = {
-            "show_fps": show_fps_var.get(),
-            "show_bbox": show_bbox_var.get(),
-            "show_skeleton": show_skeleton_var.get(),
-            "multiple_gestures": multiple_gestures_var.get(),
-            "show_grid": show_grid_var.get(),
-            "model_name": model_var.get()
-        }
-        config_handler.save_config(new_config)
-        config_vars = new_config
-
-    show_fps_var.trace("w", save_config_callback)
-    show_bbox_var.trace("w", save_config_callback)
-    show_skeleton_var.trace("w", save_config_callback)
-    multiple_gestures_var.trace("w", save_config_callback)
-    show_grid_var.trace("w", save_config_callback)
-    model_var.trace("w", save_config_callback)
+    show_fps_var.trace("w", lambda *args: save_config_callback(show_fps_var, "show_fps"))
+    show_bbox_var.trace("w", lambda *args: save_config_callback(show_bbox_var, "show_bbox"))
+    show_skeleton_var.trace("w", lambda *args: save_config_callback(show_skeleton_var, "show_skeleton"))
+    multiple_gestures_var.trace("w", lambda *args: (clear_hand_gestures_settings(), save_config_callback(multiple_gestures_var, "multiple_gestures")))
+    show_grid_var.trace("w", lambda *args: save_config_callback(show_grid_var, "show_grid"))
+    model_var.trace("w", lambda *args: save_config_callback(model_var, "model_name"))
 
     # Настройка Settings
     settings_menu.add_checkbutton(label="Show FPS", variable=show_fps_var)
@@ -189,7 +197,7 @@ def configure_menu_panel():
     settings_menu.add_checkbutton(label="Show Grid", variable=show_grid_var)
 
     models_menu = tk.Menu(settings_menu, tearoff=0)
-    for model_name in models:
+    for model_name in models_list:
         models_menu.add_radiobutton(label=f"{model_name}", variable=model_var, value=model_name)
 
     settings_menu.add_cascade(label="Model", menu=models_menu)
@@ -203,20 +211,22 @@ def configure_bottom_panel():
     bottom_frame.pack(side="bottom", fill="x")
 
     def toggle():
-        global is_running, config_vars
+        global is_running, config_vars, actions
         if is_running:
-            button.config(text="Start", bg="green", activebackground="green")
             is_running = False
+            button.config(text="Start", bg="green", activebackground="green")
             main_menu.entryconfig("Settings", state="normal")
             for dropdown in option_menu.values():
                 dropdown.config(state="normal")
         else:
+            global config_handler, model
             button.config(text="Stop", bg="red", activebackground="red")
-            is_running = True
-            config_vars = config_handler.load_config()
+            config_handler.save_config(config_vars)
             main_menu.entryconfig("Settings", state="disabled")
             for dropdown in option_menu.values():
                 dropdown.config(state="disabled")
+            model = model_factory.create_model(config_vars.get("model_name", models_list[0]))
+            is_running = True
 
     button = tk.Button(bottom_frame, text="Start", command=toggle, font=global_font, bg="green",
                        activebackground="green")
@@ -228,18 +238,31 @@ default_option = "not selected"
 options = [default_option, 'right click', 'left click', 'middle click', 'double click', 'scroll up', 'scroll down',
            'step back', 'step forward', 'custom action']
 
-hand_gestures = [
+hand_gestures_active = [
     'call', 'dislike', 'fist', 'four', 'like', 'mute', 'ok', 'one', 'palm',
     'peace', 'peace_inverted', 'rock', 'stop', 'stop_inverted', 'three',
     'three2', 'two_up', 'two_up_inverted'
 ]
 
-models = [os.path.splitext(f)[0] for f in os.listdir("models")]
+# hand_gestures_classification = [
+#     'call', 'dislike', 'fist', 'four', 'like', 'mute', 'no_gesture', 'ok', 'one', 'palm',
+#     'peace', 'peace_inverted', 'rock', 'stop', 'stop_inverted', 'three',
+#     'three2', 'two_up', 'two_up_inverted'
+# ]
 
+models_list = os.listdir("models")
+
+# Словарь для сохранение картинок в меню
 gesture_images = {}
+
+# Словарь для сохранения "жест": str - "действие": StrVal
 actions = {}
+
+# Словарь всех dropdown меню жестов в приложении
 option_menu = {}
-IMG_SIZE = 100
+
+# Размер картинки жеста в меню
+hand_gesture_img_size = 100
 
 # Определяем переменные меню
 model_var = None
@@ -251,8 +274,14 @@ root = configure_app_window()
 
 # Настройка хэндлеров
 camera_handler = AppCameraHandler()
-config_handler = ConfigHandler("config.json")
+config_handler = ConfigHandler("config.json", hand_gestures_active, default_option)
 config_vars = config_handler.load_config()
+
+# Определяем хэндлер для моделей классификации
+model_factory = ModelFactory()
+
+# Определяем переменную для модели классификации
+model = None
 
 # Определяем стиль шрифта
 global_font = ('Arial', 12)
@@ -268,7 +297,7 @@ configure_bottom_panel()
 main_frame = configure_main_frame()
 
 # Левая часть — видео
-configure_camera_frame(side="left", time=33)
+configure_camera_frame(side="left", time=66)
 
 # Правая часть — список
 configure_scrolling_frame("right")

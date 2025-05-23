@@ -6,8 +6,10 @@ import os
 import time
 from PIL import Image, ImageTk
 from hand_detectors import mediapipe_hand_detector as mp_detector
+from model_api import YoloModel, AutokerasModel
 from video_handlers.cv_video_handler import VideoHandler
 from system_action_handlers.mouse_action_handler import MouseActionHandler
+
 
 class AppCameraHandler:
     def __init__(self):
@@ -22,17 +24,17 @@ class AppCameraHandler:
         self.last_frame_time = time.time()
         self.mouseController = MouseActionHandler(10)
 
-    def get_camera_image(self, is_running, config_vars):
+    def get_camera_image(self, is_running, config_vars, model):
         _, frame = self.video_handler.get_screen()
         frame = cv2.flip(frame, 1)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        self._show_hand_bb(frame, is_running, config_vars)
+        self._process_hand(frame, is_running, config_vars, model)
 
         img = Image.fromarray(frame)
         return ImageTk.PhotoImage(img)
 
-    def _show_hand_bb(self, frame, is_running, config_vars):
+    def _process_hand(self, frame, is_running, config_vars, model):
         if not is_running:
             return
 
@@ -41,9 +43,11 @@ class AppCameraHandler:
             self.fps = 1.0 / (current_time - self.last_frame_time)
         self.last_frame_time = current_time
 
-        self.frame_counter += 1
-        if self.frame_counter % self.skip_frames != 0:
-            return
+
+        # if self.frame_counter == self.skip_frames:
+        #     self.frame_counter = 0
+        #     return
+        # self.frame_counter += 1
         frame_height, frame_width = frame.shape[:2]
 
         s1_x = frame_width // 5
@@ -74,23 +78,23 @@ class AppCameraHandler:
                 continue
 
             # Подготовка изображения для модели
-            hand_roi = cv2.resize(hand_roi, (64, 64), interpolation=cv2.INTER_AREA)
-            hand_roi = np.expand_dims(hand_roi, axis=0)
+            hand_roi = cv2.resize(hand_roi, (50, 50), interpolation=cv2.INTER_AREA)
 
             # Предсказание жеста
-            # prediction = model.predict(hand_roi)
-            # gesture = class_names[prediction[0]]
-            gesture = hand_type + ": " + "prediction"
+            prediction = model.predict(hand_roi)
+            gesture = f"{hand_type}: {prediction}"
 
             # Отображение результата
             cv2.putText(frame, gesture, (min_x, min_y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            self._show_cursor_point(hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
+            self._show_cursor_point(hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2,
+                                    s1_x, s1_y, s2_x, s2_y)
 
         self._show_fps(config_vars, frame, frame_width)
         self._show_grid(config_vars, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
 
-    def _show_cursor_point(self, hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y):
+    def _show_cursor_point(self, hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2,
+                           s1_x, s1_y, s2_x, s2_y):
         if len(hand_types) == 1 or hand_type == "Right":
             palm_points = [0, 5, 17]
 
@@ -133,18 +137,38 @@ class AppCameraHandler:
             self.video_handler.video_captor.release()
         del self.video_handler
 
+
 class ConfigHandler:
-    def __init__(self, config_path=None):
+    def __init__(self, config_path, hand_gestures, default_option):
         self.config_path = config_path
         self.default_config = {
             "show_fps": False,
             "show_bbox": False,
             "show_skeleton": False,
             "multiple_gestures": False,
-            "model_name": [os.path.splitext(f)[0] for f in os.listdir("models")][0],
             "show_grid": False,
-            "fps": 33
+            "model_name": os.listdir("models")[0],
+            "call": "not selected",
+            "dislike": "not selected",
+            "fist": "not selected",
+            "four": "not selected",
+            "like": "not selected",
+            "mute": "not selected",
+            "ok": "not selected",
+            "one": "not selected",
+            "palm": "not selected",
+            "peace": "not selected",
+            "peace_inverted": "not selected",
+            "rock": "not selected",
+            "stop": "not selected",
+            "stop_inverted": "not selected",
+            "three": "not selected",
+            "three2": "not selected",
+            "two_up": "not selected",
+            "two_up_inverted": "not selected"
         }
+        for gesture in hand_gestures:
+            self.default_config[gesture] = default_option
 
     def load_config(self):
         if not os.path.exists(self.config_path):
