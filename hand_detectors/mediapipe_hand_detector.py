@@ -7,13 +7,13 @@ class MediapipeHandDetector:
     def __init__(self, detection_confidence=0.5, tracking_confidence=0.5):
         self.hands = mp.solutions.hands.Hands(
             static_image_mode=False,
-            max_num_hands=2,
+            max_num_hands=1,
             min_detection_confidence=detection_confidence,
             min_tracking_confidence=tracking_confidence
         )
 
     def detect_hands(self, frame):
-        results = self.hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        results = self.hands.process(frame)
 
         if not results.multi_hand_landmarks:
             return [], [], []

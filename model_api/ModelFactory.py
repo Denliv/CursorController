@@ -4,34 +4,21 @@ from model_api import AutokerasModel, YoloModel
 
 
 class ModelFactory:
-    _AUTOKERAS_MODELS = {
-        "autokeras_efficient.keras",
-        "autokeras_resnet.keras",
-        "autokeras_vanilla.keras",
-        "autokeras_xception.keras"
-    }
-    _YOLO_MODELS = {
-        "yolo11.pt"
-    }
-    _MODEL_CLASSES = {
-        "autokeras": AutokerasModel.AutokerasModel,
-        "yolo": YoloModel.YoloModel
+    _MODEL_MAP = {
+        "autokeras_efficient.keras": AutokerasModel.AutokerasModel,
+        "autokeras_resnet.keras": AutokerasModel.AutokerasModel,
+        "autokeras_vanilla.keras": AutokerasModel.AutokerasModel,
+        "autokeras_xception.keras": AutokerasModel.AutokerasModel,
+        "yolo11.pt": YoloModel.YoloModel
     }
 
     def create_model(self, model_name):
-        if model_name in self._AUTOKERAS_MODELS:
-            cls = self._MODEL_CLASSES.get("autokeras")
-        elif model_name in self._YOLO_MODELS:
-            cls = self._MODEL_CLASSES.get("yolo")
-        else:
+        if model_name not in self._MODEL_MAP:
             raise ValueError(f"Неизвестная модель: {model_name}")
 
-        # Проверяем, что класс найден
-        if cls is None:
-            raise ValueError(f"Класс для модели '{model_name}' не найден в MODEL_CLASSES")
+        model_path = f"models/{model_name}"
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Файл модели не найден: {model_path}")
 
-        # Проверяем существование файла
-        if not os.path.exists(f"models/{model_name}"):
-            raise FileNotFoundError(f"Файл модели не найден: {model_name}")
-
+        cls = self._MODEL_MAP[model_name]
         return cls(model_name)

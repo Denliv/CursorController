@@ -1,14 +1,17 @@
-﻿import cv2
+﻿import json
+import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+import cv2
 import mediapipe as mp
 import numpy as np
-import json
-import os
-import time
 from PIL import Image, ImageTk
+
 from hand_detectors import mediapipe_hand_detector as mp_detector
-from model_api import YoloModel, AutokerasModel
-from video_handlers.cv_video_handler import VideoHandler
 from system_action_handlers.mouse_action_handler import MouseActionHandler
+from video_handlers.cv_video_handler import VideoHandler
 
 
 class AppCameraHandler:
@@ -19,19 +22,23 @@ class AppCameraHandler:
         self.detector = mp_detector.MediapipeHandDetector(0.5, 0.5)
         self.video_handler = VideoHandler(width=640, height=480)
         self.frame_counter = 0
-        self.skip_frames = 1
         self.fps = 0
         self.last_frame_time = time.time()
         self.mouseController = MouseActionHandler(10)
+        self.last_prediction = None
+        self.prediction_lock = threading.Lock()
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
     def get_camera_image(self, is_running, config_vars, model):
-        _, frame = self.video_handler.get_screen()
+        ret, frame = self.video_handler.get_screen()
+        if not ret:
+            return None
         frame = cv2.flip(frame, 1)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        self._process_hand(frame, is_running, config_vars, model)
+        self._process_hand(frame_rgb, is_running, config_vars, model)
 
-        img = Image.fromarray(frame)
+        img = Image.fromarray(frame_rgb)
         return ImageTk.PhotoImage(img)
 
     def _process_hand(self, frame, is_running, config_vars, model):
@@ -43,67 +50,64 @@ class AppCameraHandler:
             self.fps = 1.0 / (current_time - self.last_frame_time)
         self.last_frame_time = current_time
 
+        skip_frames = config_vars.get("frame_skip", 2)
 
-        # if self.frame_counter == self.skip_frames:
-        #     self.frame_counter = 0
-        #     return
-        # self.frame_counter += 1
         frame_height, frame_width = frame.shape[:2]
+        s1_x, s1_y = frame_width // 5, frame_height // 5
+        s2_x, s2_y = 4 * frame_width // 5, 4 * frame_height // 5
+        x1, x2 = 2 * frame_width // 5, 3 * frame_width // 5
+        y1, y2 = 2 * frame_height // 5, 3 * frame_height // 5
 
-        s1_x = frame_width // 5
-        s1_y = frame_height // 5
-        s2_x = 4 * frame_width // 5
-        s2_y = 4 * frame_height // 5
-        x1 = 2 * frame_width // 5
-        x2 = 3 * frame_width // 5
-        y1 = 2 * frame_height // 5
-        y2 = 3 * frame_height // 5
-
+        # Детекция рук
         hand_boxes, hand_landmarks_list, hand_types = self.detector.detect_hands(frame)
         for (box, landmark, hand_type) in zip(hand_boxes, hand_landmarks_list, hand_types):
             min_x, min_y, max_x, max_y = box
-            # Отрисовка
             if config_vars.get("show_bbox", False):
                 cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)
             if config_vars.get("show_skeleton", False):
-                self.mp_drawing.draw_landmarks(frame,
-                                               landmark,
-                                               self.mp_hands.HAND_CONNECTIONS,
-                                               self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                                               self.mp_drawing_styles.get_default_hand_connections_style())
+                self.mp_drawing.draw_landmarks(frame, landmark, self.mp_hands.HAND_CONNECTIONS,
+                                              self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                                              self.mp_drawing_styles.get_default_hand_connections_style())
 
-            # Выделение области руки
+            # Выделение и предобработка области руки
             hand_roi = frame[min_y:max_y, min_x:max_x]
             if hand_roi.size == 0:
                 continue
 
-            # Подготовка изображения для модели
-            hand_roi = cv2.resize(hand_roi, (50, 50), interpolation=cv2.INTER_AREA)
+            # Вычисление центра руки
+            palm_points = [0, 5, 17]
+            coords = np.array([[landmark.landmark[i].x * frame_width, landmark.landmark[i].y * frame_height]
+                              for i in palm_points])
+            hand_center = coords.mean(axis=0).astype(int)
 
-            # Предсказание жеста
-            prediction = model.predict(hand_roi)
+            # Предсказание
+            if self.frame_counter == skip_frames:
+                self.frame_counter = 0
+                def predict_async():
+                    prediction = model.predict(hand_roi, hand_center)
+                    with self.prediction_lock:
+                        self.last_prediction = prediction
+
+                self.executor.submit(predict_async)
+            else:
+                self.frame_counter += 1
+
+            # Используем последнее предсказание
+            with self.prediction_lock:
+                prediction = self.last_prediction
+            if prediction is None:
+                continue
+
             gesture = f"{hand_type}: {prediction}"
-
-            # Отображение результата
-            cv2.putText(frame, gesture, (min_x, min_y - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            self._show_cursor_point(hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2,
-                                    s1_x, s1_y, s2_x, s2_y)
+            cv2.putText(frame, gesture, (min_x, min_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            self._handle_cursor_point(hand_center, hand_types, hand_type, frame, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
+            self.mouseController.perform_action(config_vars.get(prediction, "not selected"))
 
         self._show_fps(config_vars, frame, frame_width)
         self._show_grid(config_vars, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
 
-    def _show_cursor_point(self, hand_types, hand_type, landmark, frame, frame_width, frame_height, x1, x2, y1, y2,
-                           s1_x, s1_y, s2_x, s2_y):
+    def _handle_cursor_point(self, center, hand_types, hand_type, frame, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y):
         if len(hand_types) == 1 or hand_type == "Right":
-            palm_points = [0, 5, 17]
-
-            coords = np.array([
-                [landmark.landmark[i].x * frame_width, landmark.landmark[i].y * frame_height]
-                for i in palm_points
-            ])
-
-            center = coords.mean(axis=0).astype(int)
             cv2.circle(frame, tuple(center), 5, (0, 255, 0), -1)
             self.mouseController.move_mouse(center, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
 
@@ -148,6 +152,8 @@ class ConfigHandler:
             "multiple_gestures": False,
             "show_grid": False,
             "model_name": os.listdir("models")[0],
+            "frame_time_period": 33,
+            "frame_skip": 2,
             "call": "not selected",
             "dislike": "not selected",
             "fist": "not selected",

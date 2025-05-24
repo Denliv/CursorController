@@ -13,14 +13,26 @@ class AutokerasModel:
             'peace', 'peace_inverted', 'rock', 'stop', 'stop_inverted', 'three',
             'three2', 'two_up', 'two_up_inverted'
         ]
+        self.last_prediction = None
+        self.last_center = None
+        self.cache_threshold = 5
 
-    def predict(self, image):
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    def predict(self, image, hand_center=None):
+        if hand_center is not None and self.last_center is not None:
+            if np.linalg.norm(np.array(hand_center) - np.array(self.last_center)) < self.cache_threshold:
+                return self.last_prediction
+
+        image = cv2.resize(image, (50, 50), interpolation=cv2.INTER_AREA)
         image = np.array(image).astype("float32") / 255.0
         image = np.expand_dims(image, axis=0)
 
-        predictions = self.model.predict(image)
+        # Предсказание
+        predictions = self.model.predict(image, verbose=0)
         class_idx = np.argmax(predictions, axis=1)[0]
+        prediction = self.classes[class_idx]
 
-        return self.classes[class_idx]
+        # Кэширование
+        self.last_prediction = prediction
+        self.last_center = hand_center
+
+        return prediction

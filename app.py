@@ -1,10 +1,8 @@
-﻿import tkinter as tk
-import mediapipe as mp
-import cv2
-import numpy as np
-import os
-
+﻿import os
+import tkinter as tk
+from tkinter import simpledialog
 from tkinter import ttk
+
 from PIL import Image, ImageTk
 
 from model_api.ModelFactory import ModelFactory
@@ -41,20 +39,21 @@ def configure_main_frame():
     return frame
 
 
-def configure_camera_frame(side, time=33):
+def configure_camera_frame(side):
     left_frame = tk.Frame(main_frame, bg="gray")
     left_frame.pack(side=side, fill="both", expand=True)
     label_cam = tk.Label(left_frame)
     label_cam.pack(fill="both", expand=True)
-    show_camera_image(label=label_cam, time=time)
+    show_camera_image(label=label_cam)
 
 
-def show_camera_image(label, time):
+def show_camera_image(label):
     global is_running, config_vars, camera_handler, model
+    time_period = config_vars.get("frame_time_period", 33)
     photo_image = camera_handler.get_camera_image(is_running, config_vars, model)
     label.photo_image = photo_image
     label.configure(image=photo_image)
-    label.after(time, show_camera_image, label, time)
+    label.after(time_period, show_camera_image, label)
 
 
 def configure_scrolling_frame(side):
@@ -165,13 +164,25 @@ def clear_hand_gestures_settings():
         config_vars[gesture] = default_option
 
 
+def clear_model_param():
+    global model
+    model = None
+
+
+def ask_time_period(var):
+    var.set(simpledialog.askinteger("", "Set frames time period([20, 60], ms):", initialvalue=var.get(), minvalue=20, maxvalue=60))
+
+
+def ask_frame_skip(var):
+    var.set(simpledialog.askinteger("", "Set skip frames value([0, 5]):", initialvalue=var.get(), minvalue=0, maxvalue=5))
+
+
 def configure_menu_panel():
     global main_menu
     main_menu = tk.Menu(tearoff=0)
     settings_menu = tk.Menu(tearoff=0, title="Settings")
 
-    # Загружаем config
-    global config_vars
+    global config_vars, model_var, model
 
     # Переменные Settings меню
     show_fps_var = tk.BooleanVar(value=config_vars.get("show_fps", False))
@@ -179,17 +190,19 @@ def configure_menu_panel():
     show_skeleton_var = tk.BooleanVar(value=config_vars.get("show_skeleton", False))
     multiple_gestures_var = tk.BooleanVar(value=config_vars.get("multiple_gestures", False))
     show_grid_var = tk.BooleanVar(value=config_vars.get("show_grid", False))
-    global model_var
     model_var = tk.StringVar(value=config_vars.get("model_name", models_list[0]))
+    time_period_var = tk.IntVar(value=config_vars.get("frame_time_period", 33))
+    frame_skip_var = tk.IntVar(value=config_vars.get("frame_skip", 2))
 
     show_fps_var.trace("w", lambda *args: save_config_callback(show_fps_var, "show_fps"))
     show_bbox_var.trace("w", lambda *args: save_config_callback(show_bbox_var, "show_bbox"))
     show_skeleton_var.trace("w", lambda *args: save_config_callback(show_skeleton_var, "show_skeleton"))
     multiple_gestures_var.trace("w", lambda *args: (clear_hand_gestures_settings(), save_config_callback(multiple_gestures_var, "multiple_gestures")))
     show_grid_var.trace("w", lambda *args: save_config_callback(show_grid_var, "show_grid"))
-    model_var.trace("w", lambda *args: save_config_callback(model_var, "model_name"))
+    model_var.trace("w", lambda *args: (clear_model_param(), save_config_callback(model_var, "model_name")))
+    time_period_var.trace("w", lambda *args: save_config_callback(time_period_var, "frame_time_period"))
+    frame_skip_var.trace("w", lambda *args: save_config_callback(frame_skip_var, "frame_skip"))
 
-    # Настройка Settings
     settings_menu.add_checkbutton(label="Show FPS", variable=show_fps_var)
     settings_menu.add_checkbutton(label="Show Hand bounding box", variable=show_bbox_var)
     settings_menu.add_checkbutton(label="Show hand skeleton", variable=show_skeleton_var)
@@ -201,6 +214,8 @@ def configure_menu_panel():
         models_menu.add_radiobutton(label=f"{model_name}", variable=model_var, value=model_name)
 
     settings_menu.add_cascade(label="Model", menu=models_menu)
+    settings_menu.add_command(label="Frames time period", command=lambda: ask_time_period(time_period_var))
+    settings_menu.add_command(label="Skip frames", command=lambda: ask_frame_skip(frame_skip_var))
 
     main_menu.add_cascade(label="Settings", menu=settings_menu)
     root.config(menu=main_menu)
@@ -225,7 +240,8 @@ def configure_bottom_panel():
             main_menu.entryconfig("Settings", state="disabled")
             for dropdown in option_menu.values():
                 dropdown.config(state="disabled")
-            model = model_factory.create_model(config_vars.get("model_name", models_list[0]))
+            if model is None:
+                model = model_factory.create_model(config_vars.get("model_name", models_list[0]))
             is_running = True
 
     button = tk.Button(bottom_frame, text="Start", command=toggle, font=global_font, bg="green",
@@ -243,12 +259,6 @@ hand_gestures_active = [
     'peace', 'peace_inverted', 'rock', 'stop', 'stop_inverted', 'three',
     'three2', 'two_up', 'two_up_inverted'
 ]
-
-# hand_gestures_classification = [
-#     'call', 'dislike', 'fist', 'four', 'like', 'mute', 'no_gesture', 'ok', 'one', 'palm',
-#     'peace', 'peace_inverted', 'rock', 'stop', 'stop_inverted', 'three',
-#     'three2', 'two_up', 'two_up_inverted'
-# ]
 
 models_list = os.listdir("models")
 
@@ -297,7 +307,7 @@ configure_bottom_panel()
 main_frame = configure_main_frame()
 
 # Левая часть — видео
-configure_camera_frame(side="left", time=66)
+configure_camera_frame(side="left")
 
 # Правая часть — список
 configure_scrolling_frame("right")
