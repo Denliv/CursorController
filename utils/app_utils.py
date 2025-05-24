@@ -28,6 +28,11 @@ class AppCameraHandler:
         self.last_prediction = None
         self.prediction_lock = threading.Lock()
         self.executor = ThreadPoolExecutor(max_workers=1)
+        self.action_cooldown = 0.4
+        self.last_action_time = 0
+        self.last_gesture = None
+        self.gesture_count = 0
+        self.gesture_stability_threshold = None
 
     def get_camera_image(self, is_running, config_vars, model):
         ret, frame = self.video_handler.get_screen()
@@ -66,8 +71,8 @@ class AppCameraHandler:
                 cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)
             if config_vars.get("show_skeleton", False):
                 self.mp_drawing.draw_landmarks(frame, landmark, self.mp_hands.HAND_CONNECTIONS,
-                                              self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                                              self.mp_drawing_styles.get_default_hand_connections_style())
+                                               self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                                               self.mp_drawing_styles.get_default_hand_connections_style())
 
             # Выделение и предобработка области руки
             hand_roi = frame[min_y:max_y, min_x:max_x]
@@ -77,12 +82,13 @@ class AppCameraHandler:
             # Вычисление центра руки
             palm_points = [0, 5, 17]
             coords = np.array([[landmark.landmark[i].x * frame_width, landmark.landmark[i].y * frame_height]
-                              for i in palm_points])
+                               for i in palm_points])
             hand_center = coords.mean(axis=0).astype(int)
 
             # Предсказание
             if self.frame_counter == skip_frames:
                 self.frame_counter = 0
+
                 def predict_async():
                     prediction = model.predict(hand_roi, hand_center)
                     with self.prediction_lock:
@@ -101,7 +107,22 @@ class AppCameraHandler:
             gesture = f"{hand_type}: {prediction}"
             cv2.putText(frame, gesture, (min_x, min_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             self._handle_cursor_point(hand_center, hand_types, hand_type, frame, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)
-            self.mouseController.perform_action(config_vars.get(prediction, "not selected"))
+
+            action = config_vars.get(prediction, "not selected")
+            if prediction == self.last_gesture:
+                self.gesture_count += 1
+            else:
+                self.last_gesture = prediction
+                self.gesture_count = 1
+
+            if self.gesture_stability_threshold is None:
+                self.gesture_stability_threshold = round(120 / config_vars.get("frame_time_period"))
+
+            if self.gesture_count >= self.gesture_stability_threshold and action != "not selected":
+                current_time = time.time()
+                if current_time - self.last_action_time >= self.action_cooldown:
+                    self.mouseController.perform_action(action)
+                    self.last_action_time = current_time
 
         self._show_fps(config_vars, frame, frame_width)
         self._show_grid(config_vars, frame, frame_width, frame_height, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y)

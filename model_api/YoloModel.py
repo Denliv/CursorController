@@ -13,7 +13,7 @@ class YoloModel:
         ]
         self.last_prediction = None
         self.last_center = None
-        self.cache_threshold = 5
+        self.cache_threshold = 0
 
     def predict(self, image, hand_center=None):
         if hand_center is not None and self.last_center is not None:

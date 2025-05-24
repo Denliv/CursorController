@@ -252,7 +252,7 @@ def configure_bottom_panel():
 # Определяем вспомогательные массивы
 default_option = "not selected"
 options = [default_option, 'right click', 'left click', 'middle click', 'double click', 'scroll up', 'scroll down',
-           'step back', 'step forward', 'custom action']
+           'step back', 'step forward', 'press left button', 'release left button', 'custom action']
 
 hand_gestures_active = [
     'call', 'dislike', 'fist', 'four', 'like', 'mute', 'ok', 'one', 'palm',

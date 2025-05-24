@@ -21,8 +21,8 @@
     "rock": "not selected",
     "stop": "not selected",
     "stop_inverted": "not selected",
-    "three": "not selected",
-    "three2": "not selected",
+    "three": "press left button",
+    "three2": "release left button",
     "two_up": "not selected",
     "two_up_inverted": "not selected"
 }

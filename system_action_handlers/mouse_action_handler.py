@@ -24,10 +24,10 @@ class MouseActionHandler:
             'scroll down': self.scroll_down,
             'step back': self.step_back,
             'step forward': self.step_forward,
+            'press left button': self.press_left_button,
+            'release left button': self.release_left_button,
             'custom action': self.custom_action
         }
-
-    # TODO добавить зажатую кнопку для перетаскивания
 
     def move_mouse(self, center, x1, x2, y1, y2, s1_x, s1_y, s2_x, s2_y):
         x, y = center
@@ -74,19 +74,23 @@ class MouseActionHandler:
     def left_click(self):
         self.mouse.click(Button.left)
 
+    def press_left_button(self):
+        self.mouse.press(Button.left)
+
+    def release_left_button(self):
+        self.mouse.release(Button.left)
+
     def middle_click(self):
         self.mouse.click(Button.middle)
 
     def double_click(self):
-        self.mouse.click(Button.left)
-        time.sleep(0.05)
-        self.mouse.click(Button.left)
+        self.mouse.click(Button.left, 2)
 
     def scroll_up(self):
-        self.mouse.scroll(0, 1)
+        self.mouse.scroll(0, 3)
 
     def scroll_down(self):
-        self.mouse.scroll(0, -1)
+        self.mouse.scroll(0, -3)
 
     def step_back(self):
         with self.keyboard.pressed(Key.alt):
