@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -172,7 +173,7 @@ class ConfigHandler:
             "show_skeleton": False,
             "multiple_gestures": False,
             "show_grid": False,
-            "model_name": os.listdir("models")[0],
+            "model_name": os.listdir(resource_path("models"))[0],
             "frame_time_period": 33,
             "frame_skip": 2,
             "call": "not selected",
@@ -209,3 +210,10 @@ class ConfigHandler:
     def save_config(self, config=None):
         with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, relative_path)

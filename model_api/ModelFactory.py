@@ -1,6 +1,7 @@
 ﻿import os
 
 from model_api import AutokerasModel, YoloModel
+from app_utils import resource_path
 
 
 class ModelFactory:
@@ -16,7 +17,7 @@ class ModelFactory:
         if model_name not in self._MODEL_MAP:
             raise ValueError(f"Неизвестная модель: {model_name}")
 
-        model_path = f"models/{model_name}"
+        model_path = resource_path(os.path.join("models", model_name))
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Файл модели не найден: {model_path}")
 

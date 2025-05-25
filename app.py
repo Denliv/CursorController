@@ -6,7 +6,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 
 from model_api.ModelFactory import ModelFactory
-from utils.app_utils import AppCameraHandler, ConfigHandler
+from app_utils import AppCameraHandler, ConfigHandler, resource_path
 
 
 def configure_app_window():
@@ -87,9 +87,9 @@ def fill_scrolling_frame(scrolling_frame):
         number_label.pack(side="left")
         number_label.configure(font=("Arial", 12))
 
-        image_path = os.path.join("images", f"{gesture}.png")
+        image_path = resource_path(os.path.join("images", f"{gesture}.png"))
         if not os.path.exists(image_path):
-            image_path = os.path.join("images", "no_image.png")
+            image_path = resource_path(os.path.join("images", "no_image.png"))
         try:
             photo = ImageTk.PhotoImage(Image.open(image_path).resize((hand_gesture_img_size, hand_gesture_img_size), Image.Resampling.BOX))
             gesture_images[gesture] = photo
@@ -260,7 +260,7 @@ hand_gestures_active = [
     'three2', 'two_up', 'two_up_inverted'
 ]
 
-models_list = os.listdir("models")
+models_list = os.listdir(resource_path("models"))
 
 # Словарь для сохранение картинок в меню
 gesture_images = {}
